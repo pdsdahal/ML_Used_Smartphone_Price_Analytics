@@ -18,5 +18,14 @@ The used smartphone market is highly competitive since there is no clear way to 
 - Develop the machine learning models that can accurately predict smartphones in high or low categories using their features and
   conditions. 
 
-# Data Exploration
-<img width="468" height="217" alt="image" src="https://github.com/user-attachments/assets/1adf0405-8d5c-4864-b209-7ef4e3605b2d" />
+# Ways to Address
+- [x] Data Exploration
+- [x] Data Preprocessing
+- [x] Predictor Analysis and Relevancy
+- [x] Data Dimension and Transformation
+- [x] Data Partitioning
+- [x] Model selection
+- [x] Model Fitting, Validation Accuracy, and Test Accuracy
+- [x] Model Evaluation
+- [x] Recommendations
+
