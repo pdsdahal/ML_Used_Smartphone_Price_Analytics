@@ -8,7 +8,15 @@ The main objective of the project is to find the key factors that affect used sm
 # Problem
 The used smartphone market is highly competitive since there is no clear way to determine the reasonable price of a device. Similar phones with almost identical features are often sold at different prices, and pricing is usually set manually without proper insights. It creates confusion for both buyers and vendors. If prices are very low or very high, it can create a serious problem, such as businesses losing profit or customers. On the other hand, customers lack confidence while shopping from such businesses because they are unsure whether they are getting a proper deal.
 
-## Business Goal
-•	Find a way to price used smartphones fairly and accurately, based on their features and condition.
+# Business Goal
+- Find a way to price used smartphones fairly and accurately, based on their features and condition.
+- Predict whether a used phone belongs to the high or low category based on its features and condition.
 
-•	Predict whether a used phone belongs to the high or low category based on its features and condition.
+# Analytical Goal
+- Develop the machine learning models that accurately predict the used smartphone price.
+- Identify the key factors that influence used smartphone prices.
+- Develop the machine learning models that can accurately predict smartphones in high or low categories using their features and
+  conditions. 
+
+# Data Exploration
+<img width="468" height="217" alt="image" src="https://github.com/user-attachments/assets/1adf0405-8d5c-4864-b209-7ef4e3605b2d" />
