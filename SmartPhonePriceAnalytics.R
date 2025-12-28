@@ -50,7 +50,6 @@ round(prop.table(table(used_device_data$os)) * 100, 2)
 round(prop.table(table(used_device_data$X4g)) * 100, 2)
 round(prop.table(table(used_device_data$X5g)) * 100, 2)
 
-
 # categorical data visualization--------------------
 ggplot(used_device_data, aes(x = device_brand)) +
   geom_bar(fill = "steelblue") +
@@ -64,17 +63,14 @@ ggplot(used_device_data, aes(x = os)) +
   theme_minimal() +
   labs(title = "Operating System Distribution", x = "OS", y = "Count")
 
-
 # relation ship between new and old normalized price 
 pairs.panels(used_device_data[, c("normalized_new_price", "normalized_used_price")])
-
 
 ##Data Preprocessing###############################
 ################### checking missing value
 missing_summary <- colSums(is.na(used_device_data))
 data.frame(Missing_Count = missing_summary, 
            Missing_Percent = paste0(round((missing_summary / nrow(used_device_data)) * 100, 2), "%"))
-
 
 ## combintation of missing 
 short_labels <- abbreviate(names(used_device_data), minlength = 10)
@@ -104,7 +100,6 @@ cat("verifying after removal:", missing_battery_ram_after)
 
 dim(used_device_data)
 
-
 ### missing handling ---- impute
 # List of numeric columns to impute
 numeric_cols <- c("rear_camera_mp", "front_camera_mp", "internal_memory", 
@@ -131,11 +126,8 @@ missing_summary_verify <- colSums(is.na(used_device_data))
 data.frame(Missing_Count = missing_summary_verify, 
            Missing_Percent = paste0(round((missing_summary_verify / nrow(used_device_data)) * 100, 2), "%"))
 
-
-
 # Check for empty strings
 sum(used_device_data == "", na.rm = TRUE)
-
 
 # checking zeros entire data set except categorical variables 
 zeros_summary <- colSums(used_device_data[sapply(used_device_data, is.numeric)] == 0, na.rm = TRUE)
@@ -176,3 +168,121 @@ outliers_df <- data.frame(
 )
 
 print(outliers_df)
+
+######################## Outliers Handling
+high_impact_cols <- c("screen_size", "weight")
+
+handle_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+  #replaceing outliers with nearest bound
+  x[x < lower_bound] <- lower_bound
+  x[x > upper_bound] <- upper_bound
+  return(x)
+}
+
+used_device_data[high_impact_cols] <- lapply(used_device_data[high_impact_cols], handle_outliers)
+
+# Verify results after outlier handling
+outlier_counts <- sapply(used_device_data[high_impact_cols], find_outliers)
+
+# Summary table
+outlier_handle_df <- data.frame(
+  Variable = names(outlier_counts),
+  Outlier_Count = as.numeric(outlier_counts),
+  Min_Value = round(sapply(high_impact_cols, function(x) min(used_device_data[[x]], na.rm = TRUE)), 2),
+  Max_Value = round(sapply(high_impact_cols, function(x) max(used_device_data[[x]], na.rm = TRUE)), 2),
+  Percentage = paste0(round(as.numeric(outlier_counts) / nrow(used_device_data) * 100, 2), "%"),
+  row.names = NULL
+)
+# print result
+print(outlier_handle_df)
+
+# create Price Categories
+#Business rule based on features
+
+used_device_data$price_category <- ifelse(
+  used_device_data$ram >= 4 &
+    used_device_data$rear_camera_mp >= 8 &
+    used_device_data$internal_memory >= 64 &
+    used_device_data$release_year >= 2017,
+  "High", 
+  "Low"
+)
+#table(used_device_data$price_category)
+
+# Predictor Analysis and Relevancy
+#View(used_device_data)
+
+# Correlation Analysis for Numeric Predictors
+library(dplyr)
+numeric_data <- used_device_data %>%
+  select(screen_size, rear_camera_mp, front_camera_mp,
+         internal_memory, ram, battery, weight,
+         release_year, days_used, normalized_new_price,
+         normalized_used_price)
+
+# Calculate correlation matrix
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+cor_matrix
+
+options(repr.plot.width = 16, repr.plot.height = 14)  
+par(mfrow = c(1, 1), mar = c(2, 2, 2, 2))
+
+# Increase text size
+corrplot(cor_matrix,
+         method = "color",
+         type = "upper",
+         tl.cex = 1.0,        # larger variable names
+         tl.col = "black",
+         addCoef.col = "black",
+         number.cex = 1.2,    # larger correlation numbers
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+# Pairs Plot of Numeric Variables
+pairs.panels(
+  used_device_data[, sapply(used_device_data, is.numeric)],
+  #cex.labels = 1.0,   # Increase size of labels inside the plot
+  font.labels = 2,    # Make labels bold (optional)
+  cex = 1.1         # Increase axis text size
+)
+
+# vif Function 
+#categorical variables are factors
+used_device_data_vif <- used_device_data
+used_device_data_vif <- used_device_data_vif %>% select(-all_of("price_category"))
+used_device_data_vif$device_brand <- as.factor(used_device_data_vif$device_brand)
+used_device_data_vif$os <- as.factor(used_device_data_vif$os)
+used_device_data_vif$X4g <- as.factor(used_device_data_vif$X4g)
+used_device_data_vif$X5g <- as.factor(used_device_data_vif$X5g)
+
+#detecting multicollinearity
+# car::vif() function to assess multicollinearity
+model_vif <- lm(normalized_used_price ~ ., data=used_device_data_vif)
+vif_values <- vif(model_vif)
+print(vif_values)
+
+################################ Categorical predictor relevancy
+used_device_data_cpr <- used_device_data
+used_device_data_cpr$device_brand <- as.factor(used_device_data_cpr$device_brand)
+used_device_data_cpr$os <- as.factor(used_device_data_cpr$os)
+
+# Chi-Square Test
+table_brand_os <- table(used_device_data_cpr$device_brand, used_device_data_cpr$os)
+chisq_test <- chisq.test(table_brand_os)
+print(chisq_test)
+
+# Dimension reduction (if needed)
+#now pca
+numeric_predictors <- used_device_data %>%
+  select(screen_size, rear_camera_mp, front_camera_mp, internal_memory, 
+         ram, battery, weight, release_year, days_used, normalized_new_price)
+numeric_predictors_scaled <- scale(numeric_predictors)
+pca_result <- prcomp(numeric_predictors_scaled, center = TRUE, scale. = TRUE)
+summary(pca_result)
+
+# ---identified first 4 PCA components (PC1-PC4) since they explain ~80.65% of the variance.
+#  analyzed PCA summary result but not decided to use
