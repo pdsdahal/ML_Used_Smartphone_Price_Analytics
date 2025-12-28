@@ -590,3 +590,117 @@ knn_test_pred_best_cls <- factor(knn_test_pred_best_cls, levels = levels(y_test_
 knn_test_metrics_cls <- confusionMatrix(knn_test_pred_best_cls, y_test_cat, positive = "1")
 cat("Test Metrics For Classification Best k =", best_k_cls)
 print(knn_test_metrics_cls)
+
+##################################### Random Forest Regression
+X_train_rf <- X_train
+X_val_rf   <- X_val
+X_test_rf  <- X_test
+
+# Convert categorical variables to factors
+#X_train_rf$device_brand <- as.factor(X_train_rf$device_brand)
+for (feature in categorical_features) {
+  levels_all <- unique(c(X_train_rf[[feature]], X_val_rf[[feature]], X_test_rf[[feature]]))
+  X_train_rf[[feature]] <- factor(X_train_rf[[feature]], levels = levels_all)
+  X_val_rf[[feature]]   <- factor(X_val_rf[[feature]], levels = levels_all)
+  X_test_rf[[feature]]  <- factor(X_test_rf[[feature]], levels = levels_all)
+}
+#str(X_train_rf$device_brand)
+#View(X_train_rf)
+# Model Training & Evaluation
+#Random Forest
+set.seed(123)
+rf_model <- randomForest(y_train ~ ., 
+                         data = data.frame(X_train_rf, y_train), 
+                         ntree = 100,
+                         mtry = 4,
+                         nodesize = 3
+)
+# Predict & Evaluate
+rf_pred_val  <- predict(rf_model, X_val_rf)
+rf_pred_test <- predict(rf_model, X_test_rf)
+
+# Random Forest Metrics
+rf_metrics_val  <- calculate_metrics(y_val, rf_pred_val)
+rf_metrics_test <- calculate_metrics(y_test, rf_pred_test)
+
+rf_metrics_val
+rf_metrics_test
+
+##################################### Random Forest Regression Tuning (Hyperparameter Tuning)
+# Hyperparameter grid
+p <- ncol(X_train_rf)
+rf_grid_rf_Reg <- expand.grid(
+  mtry = c(floor(sqrt(p)), floor(p/3), floor(p/2)),
+  nodesize = c(3, 5, 7),
+  ntree = c(300, 400, 500)
+)
+
+results <- data.frame()
+for(i in 1:nrow(rf_grid_rf_Reg)) {
+  params <- rf_grid_rf_Reg[i, ]
+  
+  set.seed(123)
+  rf <- randomForest(
+    x = X_train_rf,
+    y = y_train,
+    xtest = X_val_rf,
+    ytest = y_val,
+    mtry     = params$mtry,
+    ntree    = params$ntree,
+    nodesize = params$nodesize,
+    importance = TRUE,
+    keep.forest = FALSE
+  )
+  valid_rmse <- sqrt(rf$test$mse[params$ntree])
+  
+  results <- rbind(results, data.frame(
+    mtry     = params$mtry,
+    nodesize = params$nodesize,
+    ntree    = params$ntree,
+    valid_rmse = valid_rmse
+  ))
+  cat(sprintf("Row %3d | mtry=%2d nodesize=%2d ntree=%4d RMSE=%.4f\n",
+              i, params$mtry, params$nodesize, params$ntree, valid_rmse))
+}
+
+# Best model on validation set
+best <- results[which.min(results$valid_rmse), ]
+best
+# Extract best hyperparameters
+best_mtry     <- best$mtry
+best_nodesize <- best$nodesize
+best_ntree    <- best$ntree
+
+# Train final Random Forest model on the training set using best hyperparameters
+set.seed(123)
+best_model_Reg <- randomForest(
+  x = X_train_rf,
+  y = y_train,
+  mtry     = best_mtry,
+  ntree    = best_ntree,
+  nodesize = best_nodesize,
+  importance = TRUE
+)
+
+# train Final Random Forest Model with Best Hyperparameters
+# Predict & Evaluate
+rf_pred_val_final  <- predict(best_model_Reg, X_val_rf)
+rf_metrics_val_final  <- calculate_metrics(y_val, rf_pred_val_final)
+print("Tuned Random Forest - Validation Metrics:")
+rf_metrics_val_final
+
+rf_pred_test_final <- predict(best_model_Reg, X_test_rf)
+rf_metrics_test_final <- calculate_metrics(y_test, rf_pred_test_final)
+print("Tuned Random Forest - Test Metrics:")
+rf_metrics_test_final
+
+# features 
+importance_values <- importance(best_model_Reg) 
+importance_df <- data.frame(
+  Feature = rownames(importance_values),
+  Importance = importance_values[, "IncNodePurity"] 
+)
+importance_df <- importance_df[order(-importance_df$Importance), ]
+print(importance_df)
+
+
