@@ -286,3 +286,118 @@ summary(pca_result)
 
 # ---identified first 4 PCA components (PC1-PC4) since they explain ~80.65% of the variance.
 #  analyzed PCA summary result but not decided to use
+
+# Data Transformation
+# #############Data Partition 
+strata_factor <- interaction(
+  used_device_data$device_brand,
+  used_device_data$os,
+  used_device_data$X5g,
+  used_device_data$price_category,
+  drop = TRUE
+)
+# perform a stratified 60/20/20 split
+set.seed(2025)
+splits <- partition(
+  y = strata_factor, 
+  p = c(train = 0.6, val = 0.2, test = 0.2),
+  type = "stratified"
+)
+# Extract partitions
+train_data <- used_device_data[splits$train, ]
+val_data   <- used_device_data[splits$val, ]
+test_data  <- used_device_data[splits$test, ]
+
+###################### let create summary
+# Partition sizes
+train_n <- nrow(train_data)
+val_n   <- nrow(val_data)
+test_n  <- nrow(test_data)
+
+# Total records
+total_n <- nrow(used_device_data)
+
+# Create summary table
+partition_summary <- data.frame(
+  Partition   = c("Training", "Validation", "Test"),
+  Records     = c(train_n, val_n, test_n),
+  Percentage  = round(c(train_n, val_n, test_n) / total_n * 100, 2)
+)
+print(partition_summary)
+
+#Verify distributions
+round(prop.table(table(train_data$os)) * 100, 2)
+round(prop.table(table(val_data$os)) * 100, 2)
+round(prop.table(table(test_data$os)) * 100, 2)
+
+round(prop.table(table(train_data$X5g)) * 100, 2)
+round(prop.table(table(val_data$X5g)) * 100, 2)
+round(prop.table(table(test_data$X5g)) * 100, 2)
+
+# Check overlap between splits
+length(intersect(splits$train, splits$test))
+length(intersect(splits$train, splits$val)) 
+length(intersect(splits$val, splits$test))
+
+# Check coverage
+length(unique(c(splits$train, splits$val, splits$test))) == nrow(used_device_data)
+
+# Selected predictors based on correlation & relevance
+#  including normalized_new_price for observation
+#features <- c("screen_size", "rear_camera_mp", "front_camera_mp", "ram", "battery", "days_used", "release_year","device_brand", "X4g", "X5g", "normalized_new_price")
+features <- c("screen_size", "rear_camera_mp", "front_camera_mp", "ram", "battery", "days_used", "release_year","device_brand", "X4g", "X5g")
+
+#  predictors & target variable for regression
+X_train <- train_data %>% select(all_of(features))
+y_train <- train_data$normalized_used_price
+
+X_val <- val_data %>% select(all_of(features))
+y_val <- val_data$normalized_used_price
+
+X_test <- test_data %>% select(all_of(features))
+y_test <- test_data$normalized_used_price
+
+# predictors & target variable for classification
+X_train_cat <- train_data %>% select(all_of(features))
+y_train_cat <- train_data$price_category
+
+X_val_cat <- val_data %>% select(all_of(features))
+y_val_cat <- val_data$price_category
+
+X_test_cat <- test_data %>% select(all_of(features))
+y_test_cat <- test_data$price_category
+
+# convert to factor for categorical target
+y_train_cat <- factor(ifelse(y_train_cat == "High", 1, 0), levels = c(0, 1))
+y_val_cat   <- factor(ifelse(y_val_cat == "High", 1, 0), levels = c(0, 1))
+y_test_cat  <- factor(ifelse(y_test_cat == "High", 1, 0), levels = c(0, 1))
+# Convert 4G/5G to Binary
+
+binary_conversion <- function(df) {
+  df$X4g <- as.numeric(df$X4g == "yes")
+  df$X5g <- as.numeric(df$X5g == "yes")
+  return(df)
+}
+# binary conversion for regression
+X_train <- binary_conversion(X_train)
+X_val   <- binary_conversion(X_val)
+X_test  <- binary_conversion(X_test)
+
+# binary conversion for classification
+X_train_cat <- binary_conversion(X_train_cat)
+X_val_cat   <- binary_conversion(X_val_cat)
+X_test_cat  <- binary_conversion(X_test_cat)
+
+# Evaluation Function for all model
+calculate_metrics <- function(actual, predicted) {
+  rmse <- sqrt(mean((actual - predicted)^2))
+  mae  <- mean(abs(actual - predicted))
+  r2   <- 1 - sum((actual - predicted)^2) / sum((actual - mean(actual))^2)
+  return(c(RMSE = rmse, MAE = mae, R2 = r2))
+}
+
+# Define features
+numerical_features_knn <- c("screen_size", "rear_camera_mp", "front_camera_mp", "ram", "battery", "days_used", "release_year")
+binary_features <- c("X4g", "X5g")
+#categorical_features <- c("device_brand", "os")
+categorical_features <- c("device_brand")
