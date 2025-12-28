@@ -492,3 +492,101 @@ y_test_pred_best <- knn_test_best$pred
 test_metrics_best <- calculate_metrics(y_test, y_test_pred_best)
 cat("Test Metrics (Best k =", best_k, "):\n")
 print(test_metrics_best)
+
+##################################### k-NN Classifier
+X_train_knn_cls <- X_train_cat
+X_val_knn_cls <- X_val_cat
+X_test_knn_cls <- X_test_cat
+
+#One-hot encode device_brand (only categorical variable) ===
+dummy_cls <- dummyVars(~ device_brand, data = X_train_knn_cls)
+brand_train_cls <- predict(dummy_cls, newdata = X_train_knn_cls) %>% as.data.frame()
+brand_val_cls   <- predict(dummy_cls, newdata = X_val_knn_cls)   %>% as.data.frame()
+brand_test_cls  <- predict(dummy_cls, newdata = X_test_knn_cls)  %>% as.data.frame()
+
+# Remove original device_brand column and bind one-hot columns
+X_train_knn_cls <- X_train_knn_cls %>% select(-device_brand) %>% cbind(brand_train_cls)
+X_val_knn_cls <- X_val_knn_cls %>% select(-device_brand) %>% cbind(brand_val_cls)
+X_test_knn_cls <- X_test_knn_cls %>% select(-device_brand) %>% cbind(brand_test_cls)
+
+# === Z-SCORE STANDARDIZATION 
+scaler_cls <- preProcess(X_train_knn_cls, method = c("center", "scale"))
+X_train_knn_cls <- predict(scaler_cls, X_train_knn_cls) %>% as.matrix()
+X_val_knn_cls   <- predict(scaler_cls, X_val_knn_cls)   %>% as.matrix()
+X_test_knn_cls  <- predict(scaler_cls, X_test_knn_cls)  %>% as.matrix()
+
+#View(X_train_knn_cls)
+# initial kNN Performance
+# k-NN Classifier using class::knn
+initial_cls_k <- 5
+set.seed(123)
+knn_val_pred <- knn(
+  train = X_train_knn_cls,
+  test = X_val_knn_cls,
+  cl = y_train_cat,
+  k = initial_cls_k
+)
+#align prediction levels with actual
+knn_val_pred <- factor(knn_val_pred, levels = levels(y_val_cat))
+knn_val_metrics <- confusionMatrix(knn_val_pred, y_val_cat, positive = "1")
+cat("Validation Metrics For Classification Initial k =", initial_cls_k)
+print(knn_val_metrics)
+
+set.seed(123)
+knn_test_pred <- knn(
+  train = X_train_knn_cls,
+  test = X_test_knn_cls,
+  cl = y_train_cat,
+  k = initial_cls_k
+)
+#align prediction levels with actual
+knn_test_pred <- factor(knn_test_pred, levels = levels(y_test_cat))
+knn_test_metrics <- confusionMatrix(knn_test_pred, y_test_cat, positive = "1")
+cat("Test Metrics For Classification (Initial k =", initial_cls_k, "):\n")
+print(knn_test_metrics)
+
+############## k-NN Tuning with e1071::tune.knn
+set.seed(123)
+knntuning_cls <- tune.knn(
+  x = X_train_knn_cls,
+  y = y_train_cat,
+  k = 1:30,
+  validation.x = X_val_knn_cls,
+  validation.y = y_val_cat
+)
+print(knntuning_cls)
+summary(knntuning_cls)
+plot(knntuning_cls, main = "k-NN Tuning: Error vs. k", xlab = "k", ylab = "Error Rate")
+
+# k-NN Classifier with best k
+best_k_cls <- knntuning_cls$best.parameters$k
+cat("Best k value:", best_k_cls, "\n")
+
+# validation set with best k
+set.seed(123)
+knn_val_pred_best_cls <- knn(
+  train = X_train_knn_cls,
+  test = X_val_knn_cls,
+  cl = y_train_cat,
+  k = best_k_cls
+)
+#align prediction levels with actual
+knn_val_pred_best_cls <- factor(knn_val_pred_best_cls, levels = levels(y_val_cat))
+knn_val_metrics_cls <- confusionMatrix(knn_val_pred_best_cls, y_val_cat, positive = "1")
+cat("Validation Metrics For Classification (Best k =", best_k_cls, "):\n")
+print(knn_val_metrics_cls)
+
+# Test set with best k
+
+set.seed(123)
+knn_test_pred_best_cls <- knn(
+  train = X_train_knn_cls,
+  test = X_test_knn_cls,
+  cl = y_train_cat,
+  k = best_k_cls
+)
+#align prediction levels with actual
+knn_test_pred_best_cls <- factor(knn_test_pred_best_cls, levels = levels(y_test_cat))
+knn_test_metrics_cls <- confusionMatrix(knn_test_pred_best_cls, y_test_cat, positive = "1")
+cat("Test Metrics For Classification Best k =", best_k_cls)
+print(knn_test_metrics_cls)
