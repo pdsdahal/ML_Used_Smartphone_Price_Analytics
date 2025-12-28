@@ -802,3 +802,99 @@ rf_tuned_test_pred_cs <- predict(best_model, X_test_rf_cls)
 rf_tuned_test_metrics_cs <- confusionMatrix(rf_tuned_test_pred_cs, y_test_cat, positive = "1")
 print("Tuned Random Forest - Test Metrics:")
 print(rf_tuned_test_metrics_cs)
+
+#####################################  Ridge Regression 
+X_train_ridge <- X_train
+X_val_ridge   <- X_val
+X_test_ridge  <- X_test
+
+#One-hot encode device_brand (only categorical variable) ===
+dummy_rr <- dummyVars(~ device_brand, data = X_train_ridge)
+brand_train_rr <- predict(dummy_rr, newdata = X_train_ridge) %>% as.data.frame()
+brand_val_rr  <- predict(dummy_rr, newdata = X_val_ridge)   %>% as.data.frame()
+brand_test_rr  <- predict(dummy_rr, newdata = X_test_ridge)  %>% as.data.frame()
+
+
+# Remove original device_brand column and bind one-hot columns
+X_train_ridge <- X_train_ridge %>% select(-device_brand) %>% cbind(brand_train_rr)
+X_val_ridge <- X_val_ridge %>% select(-device_brand) %>% cbind(brand_val_rr)
+X_test_ridge <- X_test_ridge %>% select(-device_brand) %>% cbind(brand_test_rr)
+
+# Convert to matrix for glmnet
+X_train_matrix_ridge <- as.matrix(X_train_ridge)
+X_val_matrix_ridge   <- as.matrix(X_val_ridge)
+X_test_matrix_ridge  <- as.matrix(X_test_ridge)
+
+# train with default lambda sequence
+set.seed(123) 
+ridge_model_orig <- glmnet(
+  x = X_train_matrix_ridge,
+  y = y_train,
+  alpha = 0,         
+  standardize = TRUE 
+)
+
+# Predict on validation and test sets
+ridge_pred_val_orig  <- predict(ridge_model_orig, newx = X_val_matrix_ridge)
+ridge_pred_test_orig <- predict(ridge_model_orig, newx = X_test_matrix_ridge)
+
+# Evaluate Ridge model
+ridge_metrics_val_orig  <- calculate_metrics(y_val, ridge_pred_val_orig)
+ridge_metrics_test_orig <- calculate_metrics(y_test, ridge_pred_test_orig)
+
+
+cat("Ridge regression initial validation")
+print(ridge_metrics_val_orig)
+cat("Ridge regression initial test)")
+print(ridge_metrics_test_orig)
+
+#####################################  Ridge Regression hyperparameter tun
+# Define lambda grid
+lambda_grid <- 10^seq(3, -2, length = 100)
+
+# Store results
+validation_errors <- numeric(length(lambda_grid))
+
+for (i in 1:length(lambda_grid)) {
+  # Train model with current lambda
+  set.seed(123) 
+  ridge_model <- glmnet(
+    x = X_train_matrix_ridge,
+    y = y_train,
+    alpha = 0,
+    lambda = lambda_grid[i],
+    standardize = TRUE
+  )
+  
+  # Predict on validation set
+  pred_val <- predict(ridge_model, newx = X_val_matrix_ridge)
+  
+  # Calculate validation error (MSE)
+  validation_errors[i] <- mean((pred_val - y_val)^2)
+}
+
+# Find best lambda
+best_lambda_ridge <- lambda_grid[which.min(validation_errors)]
+best_lambda_ridge
+
+# train with best lambda
+ridge_model_tuned <- glmnet(
+  x = X_train_matrix_ridge,
+  y = y_train,
+  alpha = 0,
+  lambda = best_lambda_ridge,
+  standardize = TRUE
+)
+
+# predict on validation and test sets
+ridge_pred_val_tuned  <- predict(ridge_model_tuned, newx = X_val_matrix_ridge)
+ridge_pred_test_tuned <- predict(ridge_model_tuned, newx = X_test_matrix_ridge)
+
+# evaluate Ridge model
+ridge_metrics_val_tuned  <- calculate_metrics(y_val, ridge_pred_val_tuned)
+ridge_metrics_test_tuned <- calculate_metrics(y_test, ridge_pred_test_tuned)
+
+cat("Ridge regression tuning validation")
+print(ridge_metrics_val_tuned)
+cat("Ridge regression tuning test")
+print(ridge_metrics_test_tuned)
