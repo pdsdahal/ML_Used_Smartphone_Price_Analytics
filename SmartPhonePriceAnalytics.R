@@ -703,4 +703,102 @@ importance_df <- data.frame(
 importance_df <- importance_df[order(-importance_df$Importance), ]
 print(importance_df)
 
+#####################################  Random Forest Classification
+X_train_rf_cls <- X_train_cat
+X_val_rf_cls   <- X_val_cat
+X_test_rf_cls  <- X_test_cat
 
+# Convert categorical variables to factors
+#X_train_rf$device_brand <- as.factor(X_train_rf$device_brand)
+for (feature in categorical_features) {
+  levels_all <- unique(c(X_train_rf_cls[[feature]], X_val_rf_cls[[feature]], X_test_rf_cls[[feature]]))
+  X_train_rf_cls[[feature]] <- factor(X_train_rf_cls[[feature]], levels = levels_all)
+  X_val_rf_cls[[feature]]   <- factor(X_val_rf_cls[[feature]], levels = levels_all)
+  X_test_rf_cls[[feature]]  <- factor(X_test_rf_cls[[feature]], levels = levels_all)
+}
+# Random Forest classification
+set.seed(123)
+rf_model_cls <- randomForest(x=X_train_rf_cls,
+                             y=y_train_cat, 
+                             ntree = 500,
+                             mtry = 4,
+                             nodesize = 3,
+                             importance = TRUE)
+print(rf_model_cls)
+
+# eval random forest on validation set
+rf_cls_val_pred <- predict(rf_model_cls, X_val_rf_cls)
+rf_cls_val_metrics <- confusionMatrix(rf_cls_val_pred, y_val_cat, positive = "1")
+print(rf_cls_val_metrics)
+
+# eval random forest on test set
+rf_cls_test_pred <- predict(rf_model_cls, X_test_rf_cls)
+rf_cls_test_metrics <- confusionMatrix(rf_cls_test_pred, y_test_cat, positive = "1")
+print(rf_cls_test_metrics)
+
+#####################################  Tuned Random Forest Classification
+# combine features and target for caret
+train_data_rf <- cbind(X_train_rf_cls, price_category = y_train_cat)
+
+# Number of predictors
+p1 <- ncol(train_data_rf) - 1 
+
+# hyperparameter grid
+tuneGridCs <- expand.grid(
+  mtry = c(floor(sqrt(p1)), floor(p1/3), floor(p1/2)),
+  splitrule = c("gini"),
+  min.node.size = c(3, 5)
+)
+# Train control
+train_control <- trainControl(
+  method = "cv",
+  number = 5
+)
+# Number of trees
+ntree_values <- c(300, 400, 500)
+# Loop over ntree values
+best_model <- NULL
+best_sensitivity <- -Inf
+best_params <- list()
+set.seed(123)
+
+for (ntree in ntree_values) {
+  cat("Training with ntree =", ntree, "\n")
+  rf_model <- train(
+    price_category ~ ., 
+    data = train_data_rf,
+    method = "ranger",
+    trControl = train_control,
+    tuneGrid = tuneGridCs,
+    num.trees = ntree,
+    metric = "Sensitivity",
+    importance = "impurity"
+  )
+  
+  # Evaluate on validation set
+  preds_val <- predict(rf_model, X_val_rf_cls)
+  cm_val <- confusionMatrix(preds_val, y_val_cat, positive = "1")
+  sensitivity_val <- cm_val$byClass["Sensitivity"]
+  
+  # Keep best model based on Sensitivity
+  if (sensitivity_val > best_sensitivity) {
+    best_sensitivity <- sensitivity_val
+    best_model <- rf_model
+    best_params <- list(ntree = ntree, params = rf_model$bestTune)
+  }
+}
+cat("Best parameters based on validation set :")
+print(best_params)
+print(best_sensitivity)
+
+# Evaluate tuned model on validation set
+rf_tuned_val_pred_cs <- predict(best_model, X_val_rf_cls)
+rf_tuned_val_metrics_cs <- confusionMatrix(rf_tuned_val_pred_cs, y_val_cat, positive = "1")
+print("Tuned Random Forest - Validation Metrics:")
+print(rf_tuned_val_metrics_cs)
+
+# Evaluate tuned model on test set
+rf_tuned_test_pred_cs <- predict(best_model, X_test_rf_cls)
+rf_tuned_test_metrics_cs <- confusionMatrix(rf_tuned_test_pred_cs, y_test_cat, positive = "1")
+print("Tuned Random Forest - Test Metrics:")
+print(rf_tuned_test_metrics_cs)
