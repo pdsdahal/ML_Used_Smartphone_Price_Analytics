@@ -401,3 +401,94 @@ numerical_features_knn <- c("screen_size", "rear_camera_mp", "front_camera_mp", 
 binary_features <- c("X4g", "X5g")
 #categorical_features <- c("device_brand", "os")
 categorical_features <- c("device_brand")
+
+##################################### kNN Regression
+X_train_knn <- X_train
+X_val_knn   <- X_val
+X_test_knn  <- X_test
+
+#str(X_train_knn)
+
+#View(X_train_knn)
+#One-hot encode device_brand (only categorical variable) ===
+dummy <- dummyVars(~ device_brand, data = X_train_knn)
+brand_train <- predict(dummy, newdata = X_train_knn) %>% as.data.frame()
+brand_val   <- predict(dummy, newdata = X_val_knn)   %>% as.data.frame()
+brand_test  <- predict(dummy, newdata = X_test_knn)  %>% as.data.frame()
+
+
+# Remove original device_brand column and bind one-hot columns
+X_train_knn <- X_train_knn %>% select(-device_brand) %>% cbind(brand_train)
+X_val_knn <- X_val_knn %>% select(-device_brand) %>% cbind(brand_val)
+X_test_knn <- X_test_knn %>% select(-device_brand) %>% cbind(brand_test)
+
+
+# === Z-SCORE STANDARDIZATION 
+scaler <- preProcess(X_train_knn, method = c("center", "scale"))
+X_train_knn <- predict(scaler, X_train_knn) %>% as.matrix()
+X_val_knn   <- predict(scaler, X_val_knn)   %>% as.matrix()
+X_test_knn  <- predict(scaler, X_test_knn)  %>% as.matrix()
+
+# initial k
+initial_k <- 3
+# Validation predictions
+set.seed(2025)
+knn_val_init <- knn.reg(train = X_train_knn,
+                        test  = X_val_knn,
+                        y     = y_train,
+                        k     = initial_k)
+y_val_pred_init <- knn_val_init$pred
+val_metrics_init <- calculate_metrics(y_val, y_val_pred_init)
+cat("validation metrics initial k =", initial_k)
+print(val_metrics_init)
+
+# Test predictions
+set.seed(2025)
+knn_test_init <- knn.reg(train = X_train_knn,
+                         test  = X_test_knn,
+                         y     = y_train,
+                         k     = initial_k)
+
+y_test_pred_init <- knn_test_init$pred
+test_metrics_init <- calculate_metrics(y_test, y_test_pred_init)
+cat("test metrics initial k =", initial_k)
+print(test_metrics_init)
+
+##################################### Tune kNN Regression
+set.seed(2025)
+k_values <- seq(1, 30, by = 2)  
+val_rmse <- numeric(length(k_values))
+
+for (i in seq_along(k_values)) {
+  k <- k_values[i]
+  knn_pred_val <- knn.reg(train = X_train_knn, test = X_val_knn, y = y_train, k = k)$pred
+  val_rmse[i] <- sqrt(mean((y_val - knn_pred_val)^2))
+  cat("k = ", k, " Validation RMSE = ", round(val_rmse[i], 4), "\n")
+}
+best_k_idx <- which.min(val_rmse)
+best_k <- k_values[best_k_idx]
+best_k
+
+#predictions with Best k
+
+# Validation set
+knn_val_best <- knn.reg(train = X_train_knn,
+                        test  = X_val_knn,
+                        y     = y_train,
+                        k     = best_k)
+
+y_val_pred_best <- knn_val_best$pred
+val_metrics_best <- calculate_metrics(y_val, y_val_pred_best)
+cat("Validation Metrics (Best k =", best_k, "):\n")
+print(val_metrics_best)
+
+# Test set
+knn_test_best <- knn.reg(train = X_train_knn,
+                         test  = X_test_knn,
+                         y     = y_train,
+                         k     = best_k)
+
+y_test_pred_best <- knn_test_best$pred
+test_metrics_best <- calculate_metrics(y_test, y_test_pred_best)
+cat("Test Metrics (Best k =", best_k, "):\n")
+print(test_metrics_best)
